@@ -30,6 +30,13 @@ In `agentgg init`:
 {"quantizations":["fp8"],"ignore":["novita","makora"],"sort":"price","max_price":{"prompt":1.4,"completion":4.4}}
 ```
 
+Before Lab 2, get the sandbox image for live validation:
+
+```bash
+docker pull gracia9828/live-sandbox:pw1.56.0-mcp0.0.41-8
+docker tag gracia9828/live-sandbox:pw1.56.0-mcp0.0.41-8 agentgg/live-sandbox:pw1.56.0-mcp0.0.41-8
+```
+
 Run every `agentgg` command from this folder. In PowerShell, keep the single
 quotes around comma lists and `@file` values.
 
@@ -67,8 +74,8 @@ agentgg view ./out/lab1
 No Lab 1 results? `lab1-backup/` is a finished Lab 1 scan with four agents,
 without live validation. Use `./lab1-backup` in place of `./out/lab1`.
 
-The first live validation builds the sandbox image (about 4 GB). This can take
-10 minutes or more.
+Without the `docker pull` and `docker tag` from Setup, the first live
+validation builds the sandbox image itself. That takes 10 minutes or more.
 
 `agentgg score` prints "Nothing to score" when the scan already scored every
 finding.
