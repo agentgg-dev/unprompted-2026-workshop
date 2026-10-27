@@ -1,0 +1,26 @@
+{
+  "agentSlug": "xss",
+  "lastCompletedRunId": "20261027063112-3aad28c5f2f252ba",
+  "lastCompletedAt": "2026-10-27T06:35:21.432Z",
+  "scope": {
+    "excludePatterns": [
+      "__tests__"
+    ],
+    "includePatterns": [],
+    "maxFileSizeKb": 500,
+    "rootPath": "demo-app",
+    "reconHash": "4cdf505007ec4909"
+  },
+  "precondition": {
+    "queued": true
+  },
+  "findingCount": 3,
+  "seeded": true,
+  "filesReviewed": 2,
+  "hitCount": 10,
+  "degraded": [],
+  "preFilterHits": {
+    "regex": 10,
+    "semgrep": 0
+  }
+}

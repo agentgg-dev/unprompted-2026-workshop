@@ -1,0 +1,107 @@
+{
+  "agentSlug": "xss",
+  "filePath": "src/views.ts",
+  "contentHash": "59e2cd2f1c2cb1d8ba1d5444d51385002a46c13431cdfea2b6166ae9dc6cb400",
+  "reconHash": "4cdf505007ec4909",
+  "shards": [
+    "33-49:7"
+  ],
+  "candidates": [],
+  "findings": [
+    {
+      "id": "efeba3ff8124",
+      "agentSlug": "xss",
+      "title": "XSS: unvalidated user cookie rendered unescaped in page header and card hint",
+      "severity": "MEDIUM",
+      "cvss": {
+        "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:N",
+        "baseScore": 4.2,
+        "severity": "MEDIUM",
+        "metrics": {
+          "attackVector": "N",
+          "attackComplexity": "H",
+          "privilegesRequired": "N",
+          "userInteraction": "R",
+          "scope": "U",
+          "confidentiality": "L",
+          "integrity": "L",
+          "availability": "N"
+        },
+        "justification": "The `user` cookie is pulled from the Cookie header with only decodeURIComponent (src/server.ts:14-17) and rendered unescaped by bar() (src/views.ts:32-35) and the home-page card hint on every text/html response, so the sink is remotely reachable with no authentication gate (AV:N, PR:N). On its own the app only yields self-XSS (the sole cookie setter URL-encodes the username), so realistic cross-user execution requires chaining the SQLi-able /login — the only in-app path that plants an arbitrary cookie value in a victim's browser, via a CSRF-style form submission — a chained prerequisite plus victim interaction (AC:H, UI:R). Because the cookie doubles as the app's only identity, the payload overwrites the victim's session rather than inheriting it: the injected script can deface pages and capture victim input such as re-login credentials, but cannot read the victim's notes or modify server-side data, so impact is limited confidentiality and integrity, no availability, confined to the app's own origin (S:U, C:L, I:L, A:N)."
+      },
+      "vulnSlug": "cross-site-scripting",
+      "filePath": "src/views.ts",
+      "lineRange": [
+        33,
+        35
+      ],
+      "summary": "The `user` cookie, read straight from the Cookie request header with no validation, is interpolated raw into the status bar and the home page card hint.",
+      "details": "`currentUser()` (src/server.ts lines 14-17) pulls the `user` value out of the `Cookie` request header and applies only `decodeURIComponent`, with no validation against the users table, then every route passes it to `page()` as the signed-in name.\n\nTwo sinks render it without any encoding:\n\n- src/views.ts lines 32-35, `bar()`:\n\n```ts\n`<header><a href=\"/\">Demo App</a><span class=\"status\">${\n  user ? `Signed in as ${user}` : \"Not signed in\"\n}</span></header>`\n```\n\nreached from `page()` at src/views.ts line 39 through `${bar(user)}`.\n\n- src/server.ts lines 21-24, the home page card hint `The notes that ${user} owns.`, which `card()` (src/views.ts lines 41-42) places into `<p class=\"hint\">${hint}</p>`.\n\nA cookie is a client-controlled request header, so anything placed in it is rendered verbatim in a `text/html` response. The only server-side cookie setter (src/server.ts lines 72-73) encodes the username with `encodeURIComponent`, so within this app alone the vector is self-XSS; it becomes cross-user script execution as soon as any cookie-setting path exists (subdomain cookie toss, shared machine, intermediary proxy), and the code offers no defense because it never validates or encodes the header value it trusts as identity.",
+      "poc": "Request the home page with a crafted `user` cookie.\n\n```http\nGET / HTTP/1.1\nHost: localhost:3000\nCookie: user=%3Cscript%3Ealert(1)%3C%2Fscript%3E\n```\n\nThe response contains `<span class=\"status\">Signed in as <script>alert(1)</script></span>`, so the cookie value executes as page script.",
+      "impact": "Anyone able to influence the victim's `user` cookie gets script execution in the application origin; at minimum a user can run script in their own session. The same unvalidated value is also used as the SQL owner filter on every query, so the entire identity model rests on an unencoded client header.",
+      "references": [
+        "CWE-79",
+        "OWASP A03:2021 Injection",
+        "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
+      ],
+      "confidence": 0.65,
+      "validation": {
+        "verdict": "confirmed",
+        "reasoning": "currentUser() (src/server.ts:14-17) extracts the client-controlled `user` cookie with only decodeURIComponent and no validation, and bar() (src/views.ts:32-35) plus the home-page card hint (src/server.ts:21-24 via card()) interpolate it unescaped into a text/html response, so the PoC request verbatim yields `Signed in as <script>alert(1)</script>`. The finding's self-XSS caveat is understated: the SQLi in /login (src/server.ts:71) lets `UNION SELECT` control row.username, which is then set as the `user` cookie via encodeURIComponent (round-tripped by decodeURIComponent, no protection), and a cross-site auto-submitting form POST to /login plants that cookie in a victim's browser, making the reported sink fire as real script execution. No CSP or any other mitigation exists in the app.",
+        "confirmedImpact": "An attacker who can influence a victim's `user` cookie — including via the app's own SQLi-able /login, which sets an arbitrary attacker-chosen cookie value — achieves arbitrary JavaScript execution in the application origin on every page, since the unvalidated cookie value is rendered unescaped in the status bar and card hint of all text/html responses."
+      },
+      "notifications": [],
+      "suggestedFix": "The root cause is that `currentUser()` accepts the client-controlled `user` cookie as identity without checking it against the users table, and `views.ts` then interpolates that string into HTML with no encoding. The fix validates the cookie value against the users table (so a tossed/injected cookie simply yields \"not signed in\") and HTML-escapes it at both rendering sinks — the status bar and the card hint.\n\n**Location:** `src/views.ts`, lines 32–34 and line 42\n\n```diff\n--- a/src/views.ts\n+++ b/src/views.ts\n@@ -32,4 +32,12 @@ lines 32–34\n-const bar = (user?: string) =>\n-  `<header><a href=\"/\">Demo App</a><span class=\"status\">${\n-    user ? `Signed in as ${user}` : \"Not signed in\"\n+export const esc = (s: string) =>\n+  s\n+    .replace(/&/g, \"&amp;\")\n+    .replace(/</g, \"&lt;\")\n+    .replace(/>/g, \"&gt;\")\n+    .replace(/\"/g, \"&quot;\")\n+    .replace(/'/g, \"&#39;\");\n+\n+const bar = (user?: string) =>\n+  `<header><a href=\"/\">Demo App</a><span class=\"status\">${\n+    user ? `Signed in as ${esc(user)}` : \"Not signed in\"\n   }</span></header>`;\n@@ -41,2 +49,2 @@ line 42\n export const card = (heading: string, hint: string, body: string) =>\n-  `<section class=\"card\"><h2>${heading}</h2><p class=\"hint\">${hint}</p>${body}</section>`;\n+  `<section class=\"card\"><h2>${heading}</h2><p class=\"hint\">${esc(hint)}</p>${body}</section>`;\n```\n\n**Location:** `src/server.ts`, line 16\n\n```diff\n--- a/src/server.ts\n+++ b/src/server.ts\n@@ -14,4 +14,10 @@ line 16\n   const currentUser = (req: express.Request): string | undefined => {\n     const m = /(?:^|;\\s*)user=([^;]+)/.exec(req.headers.cookie ?? \"\");\n-    return m ? decodeURIComponent(m[1] as string) : undefined;\n+    if (!m) return undefined;\n+    const username = decodeURIComponent(m[1] as string);\n+    // The Cookie header is client-controlled: only treat it as identity when\n+    // it names a user that actually exists, so it can never carry markup.\n+    return getOne<{ username: string }>(db, \"SELECT username FROM users WHERE username=?\", [\n+      username,\n+    ])?.username;\n   };\n```\n\nFurther steps:\n\n- Apply `esc()` to the other unescaped interpolations these templates render — `card()`'s heading (`Results for ${q}` on /search), `page()`'s title (`Note ${req.params.id}`), and `noteList()`'s owner — the same flaw reached from other inputs.\n- The note body in `/notes/:id` is rendered raw (stored XSS); it needs the same encoding, and `esc` is now exported for that."
+    }
+  ],
+  "analysisHistory": [
+    {
+      "runId": "20261027063112-3aad28c5f2f252ba",
+      "phase": "detect",
+      "ranAt": "2026-10-27T06:35:21.430Z",
+      "durationMs": 0,
+      "provider": "openrouter",
+      "agentSlugs": [
+        "xss"
+      ],
+      "findingCount": 1
+    },
+    {
+      "runId": "20261027063112-3aad28c5f2f252ba",
+      "phase": "validate",
+      "ranAt": "2026-10-27T06:37:31.111Z",
+      "durationMs": 0,
+      "provider": "openrouter",
+      "agentSlugs": [
+        "xss"
+      ],
+      "findingCount": 1
+    },
+    {
+      "runId": "20261027063112-3aad28c5f2f252ba",
+      "phase": "score",
+      "ranAt": "2026-10-27T06:42:23.832Z",
+      "durationMs": 0,
+      "provider": "openrouter",
+      "agentSlugs": [
+        "xss"
+      ],
+      "findingCount": 1
+    },
+    {
+      "runId": "20261027063112-3aad28c5f2f252ba",
+      "phase": "fix",
+      "ranAt": "2026-10-27T06:45:03.097Z",
+      "durationMs": 0,
+      "provider": "openrouter",
+      "agentSlugs": [
+        "xss"
+      ],
+      "findingCount": 1
+    }
+  ],
+  "scope": {
+    "outOfScope": false
+  },
+  "status": "validated"
+}

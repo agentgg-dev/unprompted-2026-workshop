@@ -1,0 +1,2 @@
+Test build of a deliberately vulnerable notes app. Do not delete notes.
+Test logins: alice / password123 and bob / hunter2.

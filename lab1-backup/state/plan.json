@@ -1,0 +1,31 @@
+{
+  "runId": "20261027063112-3aad28c5f2f252ba",
+  "generatedAt": "2026-10-27T06:31:30.836Z",
+  "reconHash": "4cdf505007ec4909",
+  "rootPath": "demo-app",
+  "decisions": [
+    {
+      "slug": "js-sql-raw",
+      "queued": true,
+      "reason": "This is a Node.js/TypeScript project using the sql.js SQLite driver with query helpers in src/db.ts that likely build raw SQL strings, matching the agent's target of raw SQL escape hatches in JS/TS database code."
+    },
+    {
+      "slug": "xss",
+      "queued": true,
+      "reason": "HTML tag and interpolation in a template literal"
+    },
+    {
+      "slug": "open-redirect",
+      "queued": true,
+      "reason": "redirect call with a variable/template destination (trace origin)"
+    },
+    {
+      "slug": "missing-access-control",
+      "queued": true,
+      "reason": "Route with a resource-id path parameter"
+    }
+  ],
+  "autoExcludes": [
+    "__tests__"
+  ]
+}

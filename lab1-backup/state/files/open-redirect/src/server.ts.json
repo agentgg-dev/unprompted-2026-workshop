@@ -1,0 +1,107 @@
+{
+  "agentSlug": "open-redirect",
+  "filePath": "src/server.ts",
+  "contentHash": "3b5b26b3dcac13a5aa226f043c86e5bc27821c0e703b6c97f9aded9064061709",
+  "reconHash": "4cdf505007ec4909",
+  "shards": [
+    "74-107:3"
+  ],
+  "candidates": [],
+  "findings": [
+    {
+      "id": "712321b0d643",
+      "agentSlug": "open-redirect",
+      "title": "Open redirect in /go: unvalidated next query parameter controls the redirect destination",
+      "severity": "MEDIUM",
+      "cvss": {
+        "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N",
+        "baseScore": 4.3,
+        "severity": "MEDIUM",
+        "metrics": {
+          "attackVector": "N",
+          "attackComplexity": "L",
+          "privilegesRequired": "N",
+          "userInteraction": "R",
+          "scope": "U",
+          "confidentiality": "N",
+          "integrity": "L",
+          "availability": "N"
+        },
+        "justification": "The /go handler at src/server.ts:107 passes req.query.next verbatim to res.redirect with no validation, so any anonymous remote attacker can craft a link like /go?next=//evil.com on the trusted origin; the route consults no cookie or auth state, so PR is None. The confirmed impact is limited to silently routing a victim who clicks the crafted link to an attacker-controlled destination (a limited integrity effect on the redirect/navigation flow), which is why UI is Required and I is Low. No app data is disclosed or modified and availability is unaffected, and the report's token-leakage claim was not confirmed since the app issues no tokens and the user cookie is not appended to the redirect, so C and A are None; scope stays Unchanged because the phishing site is attacker infrastructure rather than a second component compromised by this bug."
+      },
+      "vulnSlug": "open-redirect",
+      "filePath": "src/server.ts",
+      "lineRange": [
+        107,
+        107
+      ],
+      "summary": "The GET /go handler passes the raw next query parameter straight to res.redirect with no origin or relative-path validation, so an attacker can turn the app's trusted domain into a redirector to any external phishing or malware site.",
+      "details": "`src/server.ts:107` is the only redirect sink in the repository whose destination comes from user input:\n\n```ts\napp.get(\"/go\", (req, res) => res.redirect(String(req.query.next ?? \"/\"))); // open redirect\n```\n\nThe value of `req.query.next` is taken verbatim from the query string and handed to `res.redirect`. The `?? \"/\"` expression only supplies a default when the parameter is absent; it is not validation, and any non-empty value passes through untouched. Express's `res.redirect` (via `res.location`) writes the string directly into the `Location` header of a 302 response, so both fully-qualified and protocol-relative destinations work:\n\n- `?next=https://evil.com/phish` produces `Location: https://evil.com/phish`\n- `?next=//evil.com/phish` produces `Location: //evil.com/phish`, which every browser resolves as protocol-relative, i.e. `http://evil.com/phish` or `https://evil.com/phish`\n\nThis is the \"no validation at all\" case. A grep across the repository confirms there is no `safeRedirect` / `validateReturnUrl` helper, no origin allowlist, and no check that the value starts with `/` while not starting with `//`. The only `Location`-setting code in the app is Express's `res.redirect`.\n\nThe other two redirect sinks in the file were reviewed and are not exploitable:\n- `src/server.ts:74` redirects to the hardcoded string `\"/\"` after a successful login.\n- `src/server.ts:104` redirects to `` `/notes/${id}` `` where `id` is the integer returned by `runInsert` (`SELECT last_insert_rowid() AS id` in `src/db.ts`), i.e. a server-generated database row id. The user-supplied `body` field is only stored as note content and never reaches the destination.\n\nFix: validate before redirecting, rejecting anything that is not a single-leading-slash relative path:\n\n```ts\n  app.get(\"/go\", (req, res) => res.redirect(String(req.query.next ?? \"/\"))); // open redirect\n```\n\nor compare `new URL(next, base).origin` against an explicit allowlist of trusted origins.",
+      "poc": "Start the app (`npm start`, default port 3000) and request /go with an absolute external URL in the next parameter.\n\n```http\nGET /go?next=https://evil.com/phish HTTP/1.1\nHost: localhost:3000\n```\n\nObserve the 302 response whose Location header is `https://evil.com/phish`, so a browser following the link lands on the attacker's site.\n\nRepeat with a protocol-relative destination, which needs no scheme at all.\n\n```http\nGET /go?next=//evil.com/phish HTTP/1.1\nHost: localhost:3000\n```\n\nObserve the 302 response whose Location header is `//evil.com/phish`, which the browser resolves against the current scheme and sends the victim to evil.com.",
+      "impact": "Anyone who follows a link on the app's trusted domain (for example `https://app.example.com/go?next=https://evil.com/login`) is silently forwarded to an attacker-chosen site. Because the URL the victim sees and clicks starts with the trusted domain, phishing and malware distribution become far more convincing, and any flow that passes tokens or authorization codes through redirect targets can be abused to leak them to the attacker.",
+      "references": [
+        "CWE-601",
+        "OWASP A01:2021 Broken Access Control",
+        "https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html"
+      ],
+      "confidence": 0.95,
+      "validation": {
+        "verdict": "confirmed",
+        "reasoning": "src/server.ts:107 passes req.query.next verbatim to res.redirect with no validation; the only middleware is express.urlencoded (line 12) and a repo-wide grep finds no allowlist or redirect-guard, so GET /go?next=https://evil.com/phish yields a 302 with Location: https://evil.com/phish from an unauthenticated request. Express 4's res.location writes the string directly to the Location header, so both absolute and protocol-relative payloads work as the PoC describes, and the scope explicitly includes open redirect.",
+        "confirmedImpact": "Any anonymous attacker can craft a link on the app's trusted origin (e.g. /go?next=https://evil.com/phish) that silently forwards victims to an attacker-controlled site via a 302 redirect, enabling convincing phishing and token/code leakage through redirect flows."
+      },
+      "notifications": [],
+      "suggestedFix": "The root cause is that `GET /go` hands `req.query.next` straight to `res.redirect`, so any absolute or protocol-relative URL becomes the `Location` header. The fix is to resolve the parameter through a validator that only ever returns a same-origin relative path (single leading `/`, no backslash), falling back to `/` for everything else.\n\n**Location:** `src/server.ts`, after line 7 and line 107\n\n```diff\n--- a/src/server.ts\n+++ b/src/server.ts\n@@ -7,1 +7,9 @@ after line 7\n const back = `<p><a href=\"/\">Back to home</a></p>`;\n+\n+// Only same-origin relative paths are valid redirect targets: exactly one\n+// leading \"/\" and no backslash anywhere, so \"//evil.com\", \"/\\evil.com\" and\n+// absolute URLs never reach the Location header.\n+const safeNext = (value: unknown): string => {\n+  const next = String(value ?? \"\");\n+  return /^\\/(?!\\/)[^\\\\]*$/.test(next) ? next : \"/\";\n+};\n@@ -107,1 +115,1 @@ line 107\n-  app.get(\"/go\", (req, res) => res.redirect(String(req.query.next ?? \"/\"))); // open redirect\n+  app.get(\"/go\", (req, res) => res.redirect(safeNext(req.query.next)));\n```"
+    }
+  ],
+  "analysisHistory": [
+    {
+      "runId": "20261027063112-3aad28c5f2f252ba",
+      "phase": "detect",
+      "ranAt": "2026-10-27T06:33:32.200Z",
+      "durationMs": 0,
+      "provider": "openrouter",
+      "agentSlugs": [
+        "open-redirect"
+      ],
+      "findingCount": 1
+    },
+    {
+      "runId": "20261027063112-3aad28c5f2f252ba",
+      "phase": "validate",
+      "ranAt": "2026-10-27T06:37:31.106Z",
+      "durationMs": 0,
+      "provider": "openrouter",
+      "agentSlugs": [
+        "open-redirect"
+      ],
+      "findingCount": 1
+    },
+    {
+      "runId": "20261027063112-3aad28c5f2f252ba",
+      "phase": "score",
+      "ranAt": "2026-10-27T06:42:23.830Z",
+      "durationMs": 0,
+      "provider": "openrouter",
+      "agentSlugs": [
+        "open-redirect"
+      ],
+      "findingCount": 1
+    },
+    {
+      "runId": "20261027063112-3aad28c5f2f252ba",
+      "phase": "fix",
+      "ranAt": "2026-10-27T06:47:32.589Z",
+      "durationMs": 0,
+      "provider": "openrouter",
+      "agentSlugs": [
+        "open-redirect"
+      ],
+      "findingCount": 1
+    }
+  ],
+  "scope": {
+    "outOfScope": false
+  },
+  "status": "validated"
+}

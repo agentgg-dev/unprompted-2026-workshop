@@ -1,0 +1,22 @@
+{
+  "purpose": "A tiny deliberately-insecure demo notes web app (single Express server, 3 source files) used for security testing/training. Users sign in with username/password, then list, search, read, and create short text notes; data lives in an in-memory sql.js (WASM SQLite) database seeded with two test users.",
+  "languages": [
+    "typescript"
+  ],
+  "frameworks": [
+    "express",
+    "sql.js"
+  ],
+  "authModel": "Username/password login POST that sets a plaintext `user=<username>` cookie; the cookie alone identifies the current user on every request — no sessions, tokens, or hashing.",
+  "integrations": [
+    "sql.js in-memory SQLite (WASM)"
+  ],
+  "notableDirs": [
+    "src/server.ts — all routes: home, /search, /login, /notes/:id, POST /notes, /go redirect",
+    "src/db.ts — in-memory DB bootstrap, seeded users/notes, query helpers",
+    "src/views.ts — server-rendered HTML string templates"
+  ],
+  "summary": "A minimal Express + TypeScript notes web app, intentionally insecure, with all logic in three files under `src/`. State is an in-memory sql.js SQLite database seeded with two users and two notes; there are no external services. Authentication is a POST /login form that sets a plaintext `user` cookie, which is then trusted as the identity on every request. The highest-risk surface is `src/server.ts`, which handles all request routing, query-string and form input, cookie parsing, and redirects, with HTML rendered via string templates in `src/views.ts` and all data access in `src/db.ts`.",
+  "reconHash": "4cdf505007ec4909",
+  "generatedAt": "2026-10-27T06:31:26.235Z"
+}

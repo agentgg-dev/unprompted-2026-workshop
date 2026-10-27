@@ -1,0 +1,12 @@
+{
+  "provider": "openrouter",
+  "model": "z-ai/glm-5.3",
+  "totals": {
+    "inputTokens": 341584,
+    "outputTokens": 196032,
+    "cachedInputTokens": 204032,
+    "calls": 28
+  },
+  "costUsd": 0.83560095,
+  "updatedAt": "2026-10-27T06:47:32.600Z"
+}

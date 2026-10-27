@@ -1,0 +1,17 @@
+{
+  "runId": "20261027063112-3aad28c5f2f252ba",
+  "type": "scan",
+  "phase": "done",
+  "stage": "report",
+  "startedAt": "2026-10-27T06:31:12.381Z",
+  "invocation": {
+    "command": "scan",
+    "argv": "scan ./demo-app -t js-sql-raw,xss,open-redirect,missing-access-control --scope ./scope.txt -o ./lab1-backup"
+  },
+  "stats": {
+    "filesScanned": 2,
+    "findingsCount": 6,
+    "totalDurationMs": 976739
+  },
+  "completedAt": "2026-10-27T06:47:32.599Z"
+}

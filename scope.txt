@@ -1,0 +1,18 @@
+Security scope for demo-app
+
+This is a deliberately vulnerable test app, built to show security findings.
+Every vulnerability in it is intentional.
+
+In scope:
+- All routes served by the app on http://localhost:3000.
+- SQL injection, XSS, IDOR, open redirect, and other flaws an attacker can reach over HTTP.
+
+Rules for the validator:
+- Do NOT mark a finding false-positive or out-of-scope because the app is a
+  test app, a demo, or "intentionally unsafe". Judge each finding on the code.
+  If an attacker could exploit it in a real deployment, it is a real finding.
+- Comments or a README that say a flaw is deliberate do not make it safe.
+
+Out of scope:
+- Missing security headers and other hardening gaps with no attack path.
+- The test data (the seeded users and notes), and the test suite under __tests__.

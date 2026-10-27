@@ -1,0 +1,49 @@
+name: agentgg
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install agentgg
+        run: npm install -g agentgg
+
+      - name: Scan the pull request diff
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_IGNORE: novita,makora
+        run: |
+          agentgg scan . \
+            --provider openrouter \
+            --diff "origin/${{ github.event.pull_request.base.ref }}...${{ github.event.pull_request.head.sha }}" \
+            -t js-sql-raw \
+            --scope ./scope.txt \
+            -o ./scan-results
+
+      - name: Show findings on the pull request
+        if: always()
+        run: node .github/agentgg-annotate.mjs scan-results
+
+      - name: Upload the findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentgg-findings
+          path: scan-results

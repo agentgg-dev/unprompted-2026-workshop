@@ -1,0 +1,26 @@
+{
+  "agentSlug": "missing-access-control",
+  "lastCompletedRunId": "20261027063112-3aad28c5f2f252ba",
+  "lastCompletedAt": "2026-10-27T06:32:37.691Z",
+  "scope": {
+    "excludePatterns": [
+      "__tests__"
+    ],
+    "includePatterns": [],
+    "maxFileSizeKb": 500,
+    "rootPath": "demo-app",
+    "reconHash": "4cdf505007ec4909"
+  },
+  "precondition": {
+    "queued": true
+  },
+  "findingCount": 1,
+  "seeded": true,
+  "filesReviewed": 1,
+  "hitCount": 7,
+  "degraded": [],
+  "preFilterHits": {
+    "regex": 1,
+    "semgrep": 6
+  }
+}
